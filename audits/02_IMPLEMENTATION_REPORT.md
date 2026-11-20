@@ -1,37 +1,41 @@
 # 02. Отчёт о реализации (Implementation Report)
 
-> **Назначение документа:** фиксация фактически выполненных задач, созданных и изменённых файлов по итогам каждого этапа.
+---
+
+## Этап 1.3: Стабилизация, диагностика `/start` и укрепление фундамента
+
+- **Статус:** `COMPLETED` *(диагностика кода, исправление багов жизненного цикла и исключений, CI workflow и 32 теста выполнены; реальный запуск с Telegram/Firebase не проводился — `NOT_TESTED`)*
+
+### Диагностика проблемы `/start` и выявленные причины
+1. **Ошибка жизненного цикла `Application` в `app/main.py`:** конструкция `async with application:` вызывала `application.shutdown()` до входа во внешний блок `finally:`, где выполнялись `updater.stop()` и `application.stop()`. При любой остановке или ошибке после `application.start()` возникало `RuntimeError: This Application is still running!`.
+2. **Отсутствие `error_callback` при `start_polling()` в `app/main.py`:** ошибки опроса Telegram API (например, `Conflict` с активным webhook/вторым инстансом или сетевые сбои) не передавались в `global_error_handler`.
+3. **Неперехваченные ошибки аутентификации и валидации в `app/database/repositories/user_repository.py`:** при пустом `FIREBASE_CREDENTIALS_PATH` локальный запуск через `ApplicationDefault()` не падал при старте, а выбрасывал `DefaultCredentialsError` при первом вызове `/start`. Этот класс не наследуется от `FirebaseError` или `GoogleAPIError`, из-за чего `/start` падал без обработки. Также не перехватывались `ValidationError`, `TimeoutError` и `OSError`.
+4. **Пробелы обработки команд и callback-ошибок (`app/bot/setup.py`, `app/handlers/menu.py`):** отсутствовал обработчик неизвестных команд (`/unknown`), а `global_error_handler` при ошибке в `CallbackQueryHandler` не вызывал `query.answer()`.
+5. **Ограничение диагностики:** из-за отсутствия реальных `.env` / логов продакшен-запуска и каталога `.git` в контейнере нельзя точно определить, какой именно runtime-фактор (неверный `BOT_TOKEN`, `Conflict` или ошибка credentials Firebase) вызвал отказ на живом сервере пользователя.
+
+### Выполненные исправления и улучшения
+- [x] Переписан lifecycle в `app/main.py` на явный порядок `initialize → start → start_polling(error_callback=...)` и `finally: updater.stop → stop → shutdown → close_firebase`.
+- [x] Добавлен `unknown_command_handler` в `app/handlers/menu.py` и зарегистрирован в `app/bot/setup.py`.
+- [x] Расширен `global_error_handler` (`InvalidToken`, `Conflict`, `query.answer()` при callback-сбоях).
+- [x] Расширен перехват ошибок в `UserRepository` (`GoogleAuthError`, `ValidationError`, `TimeoutError`, `OSError`).
+- [x] Добавлена проверка совпадения `project_id` в `FirebaseManager._get_or_create_app` (`app/database/firebase.py`) и валидация формата `BOT_TOKEN` в `app/config.py`.
+- [x] Добавлена очистка старых записей в `CallbackGuard._last_tap` (`app/utils/callbacks.py`).
+- [x] Создан GitHub Actions workflow `.github/workflows/ci.yml` (Python 3.12, `ruff check .`, `pytest -v`).
+- [x] Добавлены тесты в `tests/test_bot_lifecycle.py`, `tests/test_config.py`, `tests/test_user_repository.py` (всего `32 passed`).
+
+### Изменённые и созданные файлы (Этап 1.3)
+- **Созданы:** `.github/workflows/ci.yml`, `tests/test_bot_lifecycle.py`.
+- **Изменены:** `app/main.py`, `app/bot/setup.py`, `app/config.py`, `app/database/firebase.py`, `app/database/repositories/user_repository.py`, `app/handlers/menu.py`, `app/handlers/__init__.py`, `app/utils/callbacks.py`, `app/utils/texts.py`, `tests/test_config.py`, `tests/test_user_repository.py`, `tests/test_navigation_and_profile.py`, `audits/*.md`.
 
 ---
 
 ## Этап 1.2: Минималистичный интерфейс и пользовательская система (Astralio)
-
-- **Статус:** `COMPLETED` *(для кода, меню, навигации, профиля, тестов с mock Firestore и Ruff; живой запуск с Telegram/Firebase имеет статус `NOT_TESTED`)*
-- **Краткий итог:** продукт переименован в **Astralio**, реализовано минималистичное главное меню, inline-навигация с защитой от двойных кликов и обработкой неизвестных callback, загрузка профиля из Firestore и настройка языка интерфейса (`ru` + архитектура для `en`/`de`).
-
-### Выполненные задачи
-- [x] Переименование продукта `Astro` → `Astralio` в пользовательских текстах, метаданных (`pyproject.toml`, `README.md`, `app/__init__.py`, `app/main.py`, `run.py`) и исключениях (`AstralioError`).
-- [x] Реализация минималистичного главного меню (`app/keyboards/main_menu.py`, `app/handlers/start.py`) с 6 однорядными кнопками.
-- [x] Реализация inline-навигации (`app/handlers/menu.py`, `app/keyboards/navigation.py`, `app/utils/callbacks.py`), кнопки «Назад», редактирования сообщений и `CallbackGuard`.
-- [x] Расширение `UserModel` (`app/database/models.py`), `UserRepository` (`app/database/repositories/user_repository.py`) и `UserService` (`app/services/user_service.py`) полями `interface_language`, `last_activity`, `onboarding_completed`.
-- [x] Реализация профиля (`app/handlers/profile.py`) с корректной подстановкой «Не указан» для отсутствующих данных.
-- [x] Реализация настроек языка (`app/handlers/settings.py`, `app/utils/texts.py`) и разделов-заглушек (`Натальная карта`, `Совместимость`, `Прогнозы`, `Premium`, `Помощь`).
-- [x] Написание тестов `tests/test_navigation_and_profile.py` (всего 24 passed) и проверка `ruff check .`.
-
-### Созданные и изменённые файлы (Этап 1.2)
-- **Созданы:** `app/handlers/menu.py`, `app/handlers/profile.py`, `app/handlers/settings.py`, `app/handlers/help.py`, `app/keyboards/__init__.py`, `app/keyboards/main_menu.py`, `app/keyboards/navigation.py`, `app/utils/callbacks.py`, `app/utils/texts.py`, `tests/test_navigation_and_profile.py`.
-- **Изменены:** `pyproject.toml`, `README.md`, `run.py`, `app/__init__.py`, `app/main.py`, `app/bot/setup.py`, `app/database/models.py`, `app/database/repositories/user_repository.py`, `app/handlers/__init__.py`, `app/handlers/start.py`, `app/services/user_service.py`, `app/utils/__init__.py`, `app/utils/exceptions.py`, `tests/test_user_repository.py`, `audits/*.md`.
-
----
+- **Статус:** `COMPLETED` *(код и mock-тесты)* / `NOT_TESTED` *(live Telegram & Firebase)*
+- **Краткий итог:** переименование в Astralio, главное меню, навигация, профиль из Firestore, смена языка.
 
 ## Этап 1.1: Полная миграция на Python + Firebase Firestore
+- **Статус:** `COMPLETED` *(код и mock-тесты)* / `NOT_TESTED` *(live cloud)*
+- **Краткий итог:** удалён React/Vite, создан Python 3.12+ фундамент с Firebase Admin SDK.
 
-- **Статус:** `COMPLETED` *(локальный код и mock-тесты)* / `NOT_TESTED` *(live cloud)*
-- **Краткий итог:** удалён шаблон React/Vite/TS, создан Python 3.12+ каркас, `Settings`, `Loguru`, `FirebaseManager`, `UserRepository`, `UserService`, `/start` и 14 unit-тестов.
-
----
-
-## Этап 0: Инициализация системы аудитов и проектирования
-
+## Этап 0: Инициализация системы аудитов
 - **Статус:** `COMPLETED`
-- **Краткий итог:** спроектирована общая архитектура и создана папка `audits/`.

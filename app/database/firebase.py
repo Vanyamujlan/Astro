@@ -65,6 +65,11 @@ class FirebaseManager:
         """Return existing default Firebase App or initialize a new one."""
         try:
             existing_app = firebase_admin.get_app()
+            existing_project = existing_app.project_id
+            if existing_project and existing_project != settings.firebase_project_id:
+                raise DatabaseConnectionError(
+                    "Инициализированный Firebase App использует другой project_id."
+                )
             logger.debug("Reusing already initialized Firebase Admin App.")
             return existing_app
         except ValueError:

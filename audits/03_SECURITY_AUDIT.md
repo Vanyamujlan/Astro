@@ -1,30 +1,27 @@
 # 03. Аудит безопасности (Security Audit)
 
-> **Статус на Этапе 1.2:** Меры защиты секретов, логов, серверного доступа к Firestore и безопасной обработки callback реализованы (`COMPLETED` в коде; `NOT_TESTED` в production Firebase).  
-> **Критическое правило:** реальные токены, API-ключи и содержимое Firebase Service Account JSON никогда не сохраняются в репозиторий или аудиты.
+> **Статус на Этапе 1.3:** Меры защиты секретов, валидации входных данных, Firestore-изоляции и безопасного логирования проверены статически и unit-тестами (`COMPLETED`). Живой аудит правил в Firebase Console не выполнялся (`NOT_TESTED`).
 
 ---
 
-## 1. Секреты и конфигурация
+## 1. Защита секретов и конфигурации
 
 | Проверка | Реализация и путь к файлу | Статус |
 | :--- | :--- | :--- |
-| Исключение секретов из Git | `.gitignore` блокирует `.env`, `.env.*`, `serviceAccountKey.json`, `firebase-credentials.json`, `*firebase-adminsdk*.json`, `*.pem`, `*.key`, `*.log`, `.venv/`. | `COMPLETED` |
-| Типизированная загрузка и `SecretStr` | `app/config.py` (`Settings.bot_token: SecretStr`) — токен маскируется в `repr()`/`str()`. | `COMPLETED` |
-| Ошибка без утечки данных при старте | `app/config.py` и `app/main.py` выводят понятное сообщение об отсутствии переменных без вывода значений. | `COMPLETED` |
-| Фильтрация логов | `app/logging_config.py` + `app/utils/sanitizers.py` редактируют токены и `telegram_id`; `diagnose=False` в Loguru скрывает локальные переменные в стектрейсах. | `COMPLETED` |
+| `.gitignore` и отсутствие секретов в репозитории | Исключены `.env`, `.env.*` (кроме `.env.example`), `serviceAccountKey.json`, `firebase-credentials.json`, `*firebase-adminsdk*.json`, `*.pem`, `*.key`, `*.log`, `.venv/`. | `COMPLETED` |
+| Валидация `BOT_TOKEN` и `SecretStr` | `app/config.py` проверяет наличие двоеточия `:` и отсутствие пробелов; хранит в `SecretStr`. | `COMPLETED` |
+| Маскирование секретов и PII в логах | `app/logging_config.py` (`diagnose=False`) + `app/utils/sanitizers.py` (`sanitize_secrets`, `mask_telegram_id`). | `COMPLETED` |
+| CI без секретов | `.github/workflows/ci.yml` запускает Ruff и pytest исключительно с тестовыми mock-объектами. | `COMPLETED` |
 
 ---
 
-## 2. Безопасность Telegram UI, Callback-роутинга и Firestore
+## 2. Целостность данных, Firebase и обработка callback
 
-| Мера защиты | Реализация (путь к файлу) | Статус |
+| Проверка | Реализация | Статус |
 | :--- | :--- | :--- |
-| Защита от двойных нажатий (Callback Flood) | `app/utils/callbacks.py` (`CallbackGuard`, `run_guarded_callback`) — блокировка одновременного выполнения и кулдаун `0.35s` на повторные клики одной кнопки. | `COMPLETED` |
-| Безопасное редактирование сообщений | `app/utils/callbacks.py` (`safe_edit_message`) — перехват `BadRequest("Message is not modified")` без падения обработчика. | `COMPLETED` |
-| Обработка неизвестных callback_data | `app/handlers/menu.py` (`unknown_callback_handler`), зарегистрирован последним в `app/bot/setup.py`. | `COMPLETED` |
-| HTML-экранирование пользовательских данных | `app/handlers/profile.py` (`format_profile_text`) применяет `html.escape()` для `first_name`, `username` и `plan`. | `COMPLETED` |
-| Белый список обновляемых полей Firestore | `app/database/repositories/user_repository.py` (`_UPDATABLE_FIELDS`) запрещает изменение `telegram_id` и `created_at` через `update_user`. | `COMPLETED` |
-| Атомарное создание пользователя без перезаписи | `UserRepository.create_user` вызывает `doc_ref.create(payload)` в `asyncio.to_thread`; дубликаты отклоняются через `UserAlreadyExistsError`. | `COMPLETED` |
-| Изоляция доступа к БД | Прямые обращения к Firestore отсутствуют в `app/handlers/*`; все запросы идут через `UserService` → `UserRepository`. | `COMPLETED` |
-| Правила безопасности Cloud Firestore | Клиентские правила должны оставаться закрытыми (`allow read, write: if false;`), так как весь доступ серверный через Admin SDK. | `PLANNED` (ручная настройка в Firebase Console) |
+| Соответствие `FIREBASE_PROJECT_ID` | `app/database/firebase.py` сверяет `existing_app.project_id` с `settings.firebase_project_id` и запрещает запуск с чужим проектом. | `COMPLETED` |
+| Отсутствие доверия к `callback_data` | Все callback-роуты используют строгие regex-паттерны в `app/bot/setup.py`; `settings:lang:<code>` дополнительно проверяется по белому списку `LANGUAGES` (`enabled=True`) в `UserService` и `settings.py`; неизвестные callback перехватываются `unknown_callback_handler`. | `COMPLETED` |
+| Защита от повторного создания пользователя | `UserRepository.create_user` использует атомарный `doc_ref.create()`; `UserService` обрабатывает гонку `UserAlreadyExistsError`. | `COMPLETED` |
+| Устойчивость к сбоям БД и повреждённым документам | `UserRepository` ловит `FirebaseError`, `GoogleAPIError`, `GoogleAuthError`, `ValidationError`, `TimeoutError`, `OSError`. | `COMPLETED` |
+| Очистка памяти от rate-limit кэша | `CallbackGuard` в `app/utils/callbacks.py` очищает устаревшие записи при превышении 1000 ключей. | `COMPLETED` |
+| Отсутствие пустых `except`-блоков | Проверено по всему `app/` (единственное допустимое подавление `ValueError` в `firebase.py` — при проверке отсутствующего `default` App и при `delete_app`). | `COMPLETED` |

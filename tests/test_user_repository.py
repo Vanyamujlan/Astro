@@ -18,6 +18,7 @@ from app.utils.exceptions import (
     UserNotFoundError,
 )
 from google.api_core.exceptions import AlreadyExists, NotFound, ServiceUnavailable
+from google.auth.exceptions import DefaultCredentialsError
 
 
 class FakeSnapshot:
@@ -194,6 +195,28 @@ async def test_firestore_error_handling() -> None:
         await repo.update_user(1, username="u2")
 
 
+async def test_firestore_auth_and_corrupted_doc_handling() -> None:
+    """DefaultCredentialsError and malformed Firestore docs raise DatabaseOperationError."""
+    auth_broken_doc = MagicMock()
+    auth_broken_doc.get.side_effect = DefaultCredentialsError("No ADC credentials")
+    auth_broken_db = MagicMock()
+    auth_broken_db.collection.return_value.document.return_value = auth_broken_doc
+
+    repo_auth = UserRepository(auth_broken_db)
+    with pytest.raises(DatabaseOperationError):
+        await repo_auth.get_user_by_telegram_id(10)
+
+    bad_snapshot = FakeSnapshot("10", {"broken": "missing required fields"})
+    corrupt_doc = MagicMock()
+    corrupt_doc.get.return_value = bad_snapshot
+    corrupt_db = MagicMock()
+    corrupt_db.collection.return_value.document.return_value = corrupt_doc
+
+    repo_corrupt = UserRepository(corrupt_db)
+    with pytest.raises(DatabaseOperationError):
+        await repo_corrupt.get_user_by_telegram_id(10)
+
+
 async def test_user_service_register_sync_and_race_condition(
     user_repo: UserRepository,
     user_service: UserService,
@@ -327,3 +350,32 @@ def test_firebase_manager_duplicate_init_guard_and_database_id() -> None:
         assert client_2 is fake_client
         mock_init_app.assert_called_once()
         mock_fs_client.assert_called_once_with(app=fake_app, database_id="astro-native-db")
+
+
+def test_firebase_manager_project_mismatch_and_close() -> None:
+    """FirebaseManager rejects mismatched existing App project_id and cleans up on close."""
+    settings = Settings(
+        bot_token="123456:TestToken",  # type: ignore[arg-type]
+        firebase_project_id="expected-project",
+    )
+    manager = FirebaseManager()
+    wrong_app = MagicMock(project_id="other-project")
+
+    with patch("app.database.firebase.firebase_admin.get_app", return_value=wrong_app):
+        with pytest.raises(DatabaseConnectionError):
+            manager.initialize(settings)
+
+    # Verify close() releases client and deletes app
+    good_app = MagicMock(project_id="expected-project")
+    fake_client = MagicMock()
+    with (
+        patch("app.database.firebase.firebase_admin.get_app", return_value=good_app),
+        patch("app.database.firebase.firestore.client", return_value=fake_client),
+        patch("app.database.firebase.firebase_admin.delete_app") as mock_delete_app,
+    ):
+        manager.initialize(settings)
+        assert manager.is_initialized is True
+        manager.close()
+        assert manager.is_initialized is False
+        fake_client.close.assert_called_once()
+        mock_delete_app.assert_called_once_with(good_app)

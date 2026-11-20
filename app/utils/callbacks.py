@@ -24,6 +24,12 @@ class CallbackGuard:
             return False
 
         now = time.monotonic()
+        if len(self._last_tap) > 1000:
+            cutoff = now - max(self._cooldown * 10, 5.0)
+            self._last_tap = {
+                k: ts for k, ts in self._last_tap.items() if ts >= cutoff
+            }
+
         key = (user_id, callback_data)
         last = self._last_tap.get(key)
         if last is not None and (now - last) < self._cooldown:

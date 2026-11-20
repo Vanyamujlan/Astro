@@ -1,4 +1,4 @@
-"""Main menu navigation, placeholder sections, and fallback callback handlers."""
+"""Main menu navigation, placeholder sections, and fallback command/callback handlers."""
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -71,3 +71,13 @@ async def unknown_callback_handler(update: Update, context: ContextTypes.DEFAULT
 
     t = get_texts(DEFAULT_LANGUAGE)
     await query.answer(t["unknown_callback"])
+
+
+async def unknown_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Gracefully respond to unknown slash commands without crashing."""
+    message = update.effective_message
+    if message is None:
+        return
+
+    t = get_texts(DEFAULT_LANGUAGE)
+    await message.reply_text(t["unknown_command"])

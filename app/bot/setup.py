@@ -2,18 +2,33 @@
 
 from loguru import logger
 from telegram import Update
-from telegram.error import Forbidden, NetworkError, RetryAfter, TelegramError, TimedOut
+from telegram.error import (
+    Conflict,
+    Forbidden,
+    InvalidToken,
+    NetworkError,
+    RetryAfter,
+    TelegramError,
+    TimedOut,
+)
 from telegram.ext import (
     Application,
     ApplicationBuilder,
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
+    MessageHandler,
+    filters,
 )
 
 from app.config import Settings
 from app.handlers.help import help_callback, help_command
-from app.handlers.menu import main_menu_callback, section_callback, unknown_callback_handler
+from app.handlers.menu import (
+    main_menu_callback,
+    section_callback,
+    unknown_callback_handler,
+    unknown_command_handler,
+)
 from app.handlers.profile import profile_callback
 from app.handlers.settings import language_menu_callback, set_language_callback
 from app.handlers.start import start_handler
@@ -33,6 +48,16 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
     user_ref = "unknown"
     if isinstance(update, Update) and update.effective_user is not None:
         user_ref = mask_telegram_id(update.effective_user.id)
+
+    if isinstance(err, InvalidToken):
+        logger.critical("Telegram Bot API rejected BOT_TOKEN (InvalidToken).")
+        return
+
+    if isinstance(err, Conflict):
+        logger.error(
+            "Telegram polling Conflict: another bot instance or active webhook is running."
+        )
+        return
 
     if isinstance(err, RetryAfter):
         logger.warning(
@@ -76,13 +101,31 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
             type(err).__name__ if err is not None else "UnknownError",
         )
 
-    if isinstance(update, Update) and update.effective_message is not None:
-        try:
-            await update.effective_message.reply_text(
-                "Произошла непредвиденная ошибка. Пожалуйста, повторите попытку позже."
-            )
-        except TelegramError:
-            logger.debug("Failed to notify user={} about error.", user_ref)
+    if isinstance(update, Update):
+        if update.callback_query is not None:
+            try:
+                await update.callback_query.answer(
+                    "Временная ошибка. Попробуйте позже.",
+                    show_alert=False,
+                )
+            except TelegramError as exc:
+                logger.debug(
+                    "Failed to answer callback during error recovery: {}",
+                    type(exc).__name__,
+                )
+            return
+
+        if update.effective_message is not None:
+            try:
+                await update.effective_message.reply_text(
+                    "Произошла непредвиденная ошибка. Пожалуйста, повторите попытку позже."
+                )
+            except TelegramError as exc:
+                logger.debug(
+                    "Failed to notify user={} about error: {}",
+                    user_ref,
+                    type(exc).__name__,
+                )
 
 
 def create_application(settings: Settings, user_service: UserService) -> Application:
@@ -96,9 +139,10 @@ def create_application(settings: Settings, user_service: UserService) -> Applica
     application.bot_data["user_service"] = user_service
     application.bot_data["callback_guard"] = CallbackGuard()
 
-    # Commands
+    # Commands (registered before unknown command fallback)
     application.add_handler(CommandHandler("start", start_handler))
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(MessageHandler(filters.COMMAND, unknown_command_handler))
 
     # Navigation & Sections
     application.add_handler(CallbackQueryHandler(main_menu_callback, pattern=r"^nav:main$"))

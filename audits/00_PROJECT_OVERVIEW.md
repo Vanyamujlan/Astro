@@ -1,32 +1,35 @@
 # 00. Обзор проекта (Project Overview)
 
 > **Название продукта:** Astralio  
-> **Статус этапа 1.2:** `COMPLETED` (минималистичный интерфейс, главное меню, inline-навигация, профиль из Firestore, настройка языка и тесты с mock-клиентом выполнены; живое подключение к облаку Firebase и Telegram API имеет статус `NOT_TESTED` без учётных данных).  
-> **Текущая версия:** `0.2.0`  
-> **Целевая платформа:** Python 3.12+ (проверено в `.venv` на CPython 3.12.16)
+> **Статус этапа 1.3:** `COMPLETED` *(диагностика `/start`, исправление жизненного цикла `run_bot`, усиление обработки ошибок Firebase/Telegram, CI GitHub Actions и 32 unit-теста выполнены; живое подключение к Telegram Bot API и облачному Firebase Firestore остаётся `NOT_TESTED` из-за отсутствия секретов и логов реального запуска в среде).*  
+> **Текущая версия:** `0.3.0`  
+> **Целевая платформа:** Python 3.12+ (проверено в `.venv` на CPython `3.12.16`)
 
 ---
 
 ## 1. Описание проекта
 
-**Astralio** — минималистичная коммерческая астрологическая платформа в Telegram на Python и облачной базе **Firebase Cloud Firestore (Native mode)**.
+**Astralio** — минималистичный коммерческий астрологический Telegram-бот на Python 3.12+ и **Firebase Cloud Firestore (Native mode)**.
 
-На **Этапе 1.2** продукт получил финальное имя **Astralio**, минималистичное главное меню, единую inline-навигацию с защитой от повторных нажатий, экран профиля с загрузкой реальных данных из Firestore, настройку языка интерфейса (активный `ru` + задел под `en`/`de`) и честные информационные страницы будущих разделов.
+На **Этапе 1.3** проведена глубокая диагностика команды `/start` и устойчивости приложения: исправлены ошибки асинхронного жизненного цикла `python-telegram-bot`, перехват ошибок polling (`error_callback`), обработка `DefaultCredentialsError` и повреждённых документов в `UserRepository`, добавлен обработчик неизвестных команд и настроен GitHub Actions CI.
 
 ---
 
 ## 2. Статус функционала (Реализовано vs Запланировано)
 
 ### Реализовано (`COMPLETED`)
-- **Этап 1.1:** Python 3.12+ каркас, `pydantic-settings`, `loguru`, централизованный `FirebaseManager` (`firebase-admin`), `UserRepository` (`users`), `UserService`, глобальный обработчик ошибок.
-- **Этап 1.2:**
-  - Переименование продукта `Astro` → `Astralio` во всех пользовательских интерфейсах и документации.
-  - Минималистичное главное меню (`app/keyboards/main_menu.py`) с 6 разделами по одной кнопке в строке.
-  - Единая inline-навигация (`app/handlers/menu.py`, `app/keyboards/navigation.py`): переходы, кнопка «Назад», редактирование сообщений (`safe_edit_message`), защита от двойных нажатий (`CallbackGuard`) и обработка неизвестных `callback_data`.
-  - Профиль пользователя (`app/handlers/profile.py`), загружаемый из Firestore (`UserService.get_user_profile`), с честным выводом `Не указан` для отсутствующих полей.
-  - Изменение языка интерфейса (`app/handlers/settings.py`, `app/utils/texts.py`): активный русский язык и подготовленная структура под английский и немецкий языки.
-  - Информационные страницы разделов (`Натальная карта`, `Совместимость`, `Прогнозы`, `Premium`, `Помощь`) без фиктивной функциональности.
-  - Автотесты `pytest` (24/24 passed) и проверка `ruff check .` (0 ошибок).
+- **Этап 1.1:** Python 3.12+ каркас, `pydantic-settings`, `loguru`, централизованный `FirebaseManager` (`firebase-admin`), `UserRepository` (`users`), `UserService`.
+- **Этап 1.2:** Переименование в **Astralio**, минималистичное главное меню, inline-навигация, профиль из Firestore (`Не указан` для пустых полей), настройка языка (`ru` активен; `en`/`de` подготовлены), `CallbackGuard`.
+- **Этап 1.3 (Stability & Hardening):**
+  - Исправлен асинхронный порядок остановки `Application` в `app/main.py` (`updater.stop()` → `app.stop()` → `app.shutdown()` → `close_firebase()`).
+  - Подключён `error_callback` для `updater.start_polling()` с передачей ошибок в `global_error_handler` (включая `InvalidToken`, `Conflict`).
+  - Расширен перехват исключений в `UserRepository` (`GoogleAuthError` / `DefaultCredentialsError`, `ValidationError`, `TimeoutError`, `OSError`).
+  - Проверка совпадения `project_id` в `FirebaseManager` и валидация формата `BOT_TOKEN` в `Settings`.
+  - Обработчик неизвестных команд (`unknown_command_handler`), снятие спиннера callback-кнопок при ошибках, ограничение роста кэша `CallbackGuard`.
+  - GitHub Actions CI workflow (`.github/workflows/ci.yml`: Python 3.12, `ruff`, `pytest`).
+  - Автотесты `pytest` (`32 passed`) и проверка `ruff check .` (0 ошибок).
 
-### Запланировано (`PLANNED`)
-- **Этап 1.3+:** Ввод и сохранение данных рождения (`birth_data`), реальные астрономические расчёты (`pyswisseph`), ИИ-интерпретации (`ai_usage`), Telegram Stars (`payments`), подписки (`subscriptions`), PDF/изображения, рефералы, админ-панель.
+### Запланировано (`PLANNED` — Этап 2+)
+- Ввод и сохранение данных рождения (`birth_data`).
+- Астрономические расчёты (`pyswisseph`), графика (`Pillow`), PDF (`ReportLab`).
+- OpenAI-compatible AI-слой (`ai_usage`), Telegram Stars (`payments`), подписки (`subscriptions`), рефералы и админ-панель.

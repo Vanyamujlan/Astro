@@ -6,7 +6,9 @@ from typing import Any
 
 from firebase_admin.exceptions import FirebaseError
 from google.api_core.exceptions import AlreadyExists, GoogleAPIError, NotFound
+from google.auth.exceptions import GoogleAuthError
 from loguru import logger
+from pydantic import ValidationError
 
 from app.database.models import UserModel, default_subscription_payload
 from app.utils.exceptions import (
@@ -49,7 +51,7 @@ class UserRepository:
         try:
             snapshot = await asyncio.to_thread(self._get_snapshot_sync, telegram_id)
             return bool(snapshot.exists)
-        except (FirebaseError, GoogleAPIError) as exc:
+        except (FirebaseError, GoogleAPIError, GoogleAuthError, TimeoutError, OSError) as exc:
             logger.error(
                 "Firestore user_exists failed for user={}: {}",
                 mask_telegram_id(telegram_id),
@@ -65,7 +67,14 @@ class UserRepository:
                 return None
             data = snapshot.to_dict() or {}
             return UserModel.model_validate(data)
-        except (FirebaseError, GoogleAPIError) as exc:
+        except (
+            FirebaseError,
+            GoogleAPIError,
+            GoogleAuthError,
+            ValidationError,
+            TimeoutError,
+            OSError,
+        ) as exc:
             logger.error(
                 "Firestore get_user failed for user={}: {}",
                 mask_telegram_id(telegram_id),
@@ -114,7 +123,7 @@ class UserRepository:
             raise UserAlreadyExistsError(
                 f"Пользователь {mask_telegram_id(telegram_id)} уже существует."
             ) from exc
-        except (FirebaseError, GoogleAPIError) as exc:
+        except (FirebaseError, GoogleAPIError, GoogleAuthError, TimeoutError, OSError) as exc:
             logger.error(
                 "Firestore create_user failed for user={}: {}",
                 mask_telegram_id(telegram_id),
@@ -151,7 +160,14 @@ class UserRepository:
             raise UserNotFoundError(
                 f"Пользователь {mask_telegram_id(telegram_id)} не найден."
             ) from exc
-        except (FirebaseError, GoogleAPIError) as exc:
+        except (
+            FirebaseError,
+            GoogleAPIError,
+            GoogleAuthError,
+            ValidationError,
+            TimeoutError,
+            OSError,
+        ) as exc:
             logger.error(
                 "Firestore update_user failed for user={}: {}",
                 mask_telegram_id(telegram_id),

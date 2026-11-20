@@ -249,5 +249,5 @@ def test_create_application_registers_all_stage_1_2_handlers(
 
     assert app.bot_data["user_service"] is user_service
     assert isinstance(app.bot_data["callback_guard"], CallbackGuard)
-    # Default group 0 has 2 command handlers + 7 callback handlers (including fallback)
-    assert len(app.handlers[0]) == 9
+    # Default group 0: 2 commands + 1 unknown command + 7 callbacks (including fallback)
+    assert len(app.handlers[0]) == 10

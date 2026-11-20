@@ -68,6 +68,19 @@ def test_load_settings_blank_values_rejected(monkeypatch: pytest.MonkeyPatch) ->
         load_settings(env_file=None)
 
 
+def test_load_settings_invalid_bot_token_format(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Malformed BOT_TOKEN without colon separator or containing spaces is rejected."""
+    monkeypatch.setenv("FIREBASE_PROJECT_ID", "astralio-test")
+    monkeypatch.setenv("BOT_TOKEN", "invalid_token_without_colon")
+
+    with pytest.raises(ConfigurationError):
+        load_settings(env_file=None)
+
+    monkeypatch.setenv("BOT_TOKEN", "123456:bad token with spaces")
+    with pytest.raises(ConfigurationError):
+        load_settings(env_file=None)
+
+
 def test_sanitize_secrets_and_mask_telegram_id() -> None:
     """Secrets and Telegram IDs are masked before hitting logs."""
     raw = (

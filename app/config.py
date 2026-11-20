@@ -53,6 +53,8 @@ class Settings(BaseSettings):
         raw = value.get_secret_value().strip()
         if not raw:
             raise ValueError("BOT_TOKEN must not be empty.")
+        if ":" not in raw or any(ch.isspace() for ch in raw):
+            raise ValueError("BOT_TOKEN has invalid format (expected '<bot_id>:<secret>').")
         return SecretStr(raw)
 
     @field_validator("firebase_project_id")
