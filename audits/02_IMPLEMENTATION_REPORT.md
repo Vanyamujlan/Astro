@@ -2,6 +2,19 @@
 
 ---
 
+## Конфигурация Firebase Admin SDK через `.env` (без JSON-файла)
+
+- **Статус:** `COMPLETED` *(код, валидация, санитизация секретов и 34 mock-теста пройдены; живое облачное подключение не выполнялось — `NOT_TESTED`)*
+- **Выполненные изменения:**
+  - В `app/config.py` добавлены обязательные переменные `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` (`SecretStr`) и опциональная `FIREBASE_DATABASE_ID`; удалена загрузка JSON-файла `FIREBASE_CREDENTIALS_PATH`.
+  - Добавлена функция `normalize_private_key()` для преобразования однострочных `\n` / `\r\n` и снятия внешних кавычек, а также проверка формата email, PEM-заголовков (`PRIVATE KEY` / `RSA PRIVATE KEY`) и base64-содержимого при запуске без утечки ключа в сообщениях об ошибках.
+  - В `app/database/firebase.py` `FirebaseManager._build_credentials()` переведён на `google.oauth2.service_account.Credentials.from_service_account_info()` с передачей области доступа `_FIREBASE_SCOPES` и без использования файловых ключей.
+  - В `app/utils/sanitizers.py` усилено маскирование неполных/усечённых PEM-ключей в логах.
+  - Обновлены `.env.example` (только безопасные заглушки), `README.md` и тесты (`tests/test_config.py`, `tests/test_user_repository.py`, `tests/test_navigation_and_profile.py`, `tests/test_bot_lifecycle.py`).
+  - Архитектура Firestore и `UserRepository` / коллекция `users` не изменялись.
+
+---
+
 ## Этап 1.3: Стабилизация, диагностика `/start` и укрепление фундамента
 
 - **Статус:** `COMPLETED` *(диагностика кода, исправление багов жизненного цикла и исключений, CI workflow и 32 теста выполнены; реальный запуск с Telegram/Firebase не проводился — `NOT_TESTED`)*

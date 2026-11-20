@@ -14,7 +14,7 @@
 ### 1.2. Firebase Cloud Firestore (Native mode) (`firebase-admin==6.9.0`)
 - **Модули:** `app/database/firebase.py`, `app/database/models.py`, `app/database/repositories/user_repository.py`.
 - **Особенности:**
-  - Только серверный Admin SDK.
+  - Авторизация через `google.oauth2.service_account.Credentials.from_service_account_info` из переменных окружения (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`) без JSON-файла.
   - Блокирующие операции вынесены в `asyncio.to_thread(...)`.
   - Проверка совпадения `project_id` и поддержка `FIREBASE_DATABASE_ID`.
   - Перехват `FirebaseError`, `GoogleAPIError`, `GoogleAuthError`, `ValidationError`, `TimeoutError`, `OSError`.

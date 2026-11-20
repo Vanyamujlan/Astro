@@ -4,20 +4,25 @@
 
 ---
 
-## 1. Сводка последнего запуска (Этап 1.3)
+## 1. Сводка последнего запуска (Firebase `.env` auth + Этап 1.3)
 
 - **Дата запуска:** `2026-11-20`
 - **Среда:** `.venv` (`CPython 3.12.16`, `pytest 8.4.2`, `pytest-asyncio 0.26.0`, `ruff 0.17.6`)
 
 | Проверка | Команда | Фактический результат | Статус |
 | :--- | :--- | :--- | :--- |
-| `pytest` | `.venv/bin/pytest -v` | **`32 passed in 1.40s`** (0 failed, 0 skipped) | `COMPLETED` |
-| `ruff` | `.venv/bin/ruff check .` | **`All checks passed!`** (0 ошибок) | `COMPLETED` |
-| Импорты | `.venv/bin/python -c "import ..."` | **`ALL_STAGE_1_3_IMPORTS_OK`** (exit code `0`) | `COMPLETED` |
+| `pytest` | `pytest -v` | **`34 passed in 1.42s`** (0 failed, 0 skipped) | `COMPLETED` |
+| `ruff` | `ruff check .` | **`All checks passed!`** (0 ошибок) | `COMPLETED` |
+
+### Проверки авторизации Firebase через `.env` (mock-тесты)
+- Преобразование однострочного `FIREBASE_PRIVATE_KEY` с `\n` и кавычками в стандартный PEM внутри `SecretStr` (`tests/test_config.py`).
+- Отклонение отсутствующих `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, некорректного email, отсутствующих PEM-маркеров и битого base64 без утечки секрета в `ConfigurationError`.
+- Маскирование полных и усечённых PEM-ключей в `sanitize_secrets()`.
+- Создание `google.oauth2.service_account.Credentials.from_service_account_info` и передача в `firebase_admin.initialize_app` с `FIREBASE_DATABASE_ID` и без него, безопасный перехват невалидного ключа и совместимость с `UserRepository` (`tests/test_user_repository.py`).
 
 ---
 
-## 2. Новые тесты Этапа 1.3
+## 2. Тесты Этапа 1.3
 
 ### `tests/test_bot_lifecycle.py` (5/5)
 1. `test_run_bot_startup_and_graceful_shutdown_order` — проверка строгого порядка: `app.initialize` → `app.start` → `updater.start_polling(error_callback=...)` → `updater.stop` → `app.stop` → `app.shutdown` → `close_firebase` (имитация проверки `if self.running: raise RuntimeError`).

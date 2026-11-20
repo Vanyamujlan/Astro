@@ -7,6 +7,7 @@ _BEARER_PATTERN = re.compile(r"(Bearer\s+)[A-Za-z0-9._\-+/=]+", re.IGNORECASE)
 _PRIVATE_KEY_PATTERN = re.compile(
     r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"
 )
+_TRUNCATED_PRIVATE_KEY_PATTERN = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*")
 
 
 def sanitize_secrets(text: str) -> str:
@@ -16,6 +17,7 @@ def sanitize_secrets(text: str) -> str:
     masked = _BOT_TOKEN_PATTERN.sub("[REDACTED_BOT_TOKEN]", text)
     masked = _BEARER_PATTERN.sub(r"\1[REDACTED_TOKEN]", masked)
     masked = _PRIVATE_KEY_PATTERN.sub("[REDACTED_PRIVATE_KEY]", masked)
+    masked = _TRUNCATED_PRIVATE_KEY_PATTERN.sub("[REDACTED_PRIVATE_KEY]", masked)
     return masked
 
 

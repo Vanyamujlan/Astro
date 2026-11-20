@@ -9,8 +9,9 @@
 | Проверка | Реализация и путь к файлу | Статус |
 | :--- | :--- | :--- |
 | `.gitignore` и отсутствие секретов в репозитории | Исключены `.env`, `.env.*` (кроме `.env.example`), `serviceAccountKey.json`, `firebase-credentials.json`, `*firebase-adminsdk*.json`, `*.pem`, `*.key`, `*.log`, `.venv/`. | `COMPLETED` |
-| Валидация `BOT_TOKEN` и `SecretStr` | `app/config.py` проверяет наличие двоеточия `:` и отсутствие пробелов; хранит в `SecretStr`. | `COMPLETED` |
-| Маскирование секретов и PII в логах | `app/logging_config.py` (`diagnose=False`) + `app/utils/sanitizers.py` (`sanitize_secrets`, `mask_telegram_id`). | `COMPLETED` |
+| Авторизация Firebase исключительно через `.env` | `FIREBASE_PRIVATE_KEY` (`SecretStr`) и `FIREBASE_CLIENT_EMAIL` загружаются только из окружения, без JSON-файлов (`app/config.py`, `app/database/firebase.py`). | `COMPLETED` |
+| Валидация секретов без утечки в ошибках | `BOT_TOKEN` (`:`), `FIREBASE_CLIENT_EMAIL` и PEM/base64-структура `FIREBASE_PRIVATE_KEY` проверяются при старте; raw-значения не попадают в `ConfigurationError` или `DatabaseConnectionError`. | `COMPLETED` |
+| Маскирование секретов и PII в логах | `app/logging_config.py` (`diagnose=False`) + `app/utils/sanitizers.py` (`sanitize_secrets` для полных и усечённых PEM-ключей, токенов, Bearer; `mask_telegram_id`). | `COMPLETED` |
 | CI без секретов | `.github/workflows/ci.yml` запускает Ruff и pytest исключительно с тестовыми mock-объектами. | `COMPLETED` |
 
 ---

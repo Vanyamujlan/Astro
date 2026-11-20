@@ -3,15 +3,26 @@
 from __future__ import annotations
 
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import firestore
 from firebase_admin.exceptions import FirebaseError
 from google.api_core.exceptions import GoogleAPIError
-from google.auth.exceptions import DefaultCredentialsError
+from google.auth.exceptions import GoogleAuthError
 from google.cloud.firestore_v1 import Client as FirestoreClient
+from google.oauth2 import service_account
 from loguru import logger
 
-from app.config import Settings
+from app.config import Settings, normalize_private_key
 from app.utils.exceptions import DatabaseConnectionError
+
+_FIREBASE_SCOPES: tuple[str, ...] = (
+    "https://www.googleapis.com/auth/cloud-platform",
+    "https://www.googleapis.com/auth/datastore",
+    "https://www.googleapis.com/auth/devstorage.read_write",
+    "https://www.googleapis.com/auth/firebase",
+    "https://www.googleapis.com/auth/identitytoolkit",
+    "https://www.googleapis.com/auth/userinfo.email",
+)
+_GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"  # noqa: S105
 
 
 class FirebaseManager:
@@ -50,7 +61,7 @@ class FirebaseManager:
             return client
         except DatabaseConnectionError:
             raise
-        except (FirebaseError, GoogleAPIError, DefaultCredentialsError, ValueError, OSError) as exc:
+        except (FirebaseError, GoogleAPIError, GoogleAuthError, ValueError, OSError) as exc:
             logger.error(
                 "Failed to initialize Firebase Firestore for project_id={}: {}",
                 settings.firebase_project_id,
@@ -58,7 +69,8 @@ class FirebaseManager:
             )
             raise DatabaseConnectionError(
                 "Не удалось подключиться к Firebase Cloud Firestore. "
-                "Проверьте FIREBASE_PROJECT_ID, FIREBASE_CREDENTIALS_PATH и права доступа."
+                "Проверьте FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, "
+                "FIREBASE_PRIVATE_KEY и права доступа."
             ) from exc
 
     def _get_or_create_app(self, settings: Settings) -> firebase_admin.App:
@@ -79,21 +91,24 @@ class FirebaseManager:
         options = {"projectId": settings.firebase_project_id}
         return firebase_admin.initialize_app(credential=cred, options=options)
 
-    def _build_credentials(self, settings: Settings) -> credentials.Base:
-        """Load service account certificate if path is given, else Application Default."""
-        creds_path = settings.credentials_file
-        if creds_path is None:
-            logger.debug("Using Firebase Application Default Credentials (ADC).")
-            return credentials.ApplicationDefault()
-
-        if not creds_path.exists() or not creds_path.is_file():
-            raise DatabaseConnectionError(
-                "Указанный файл учётных данных Firebase (FIREBASE_CREDENTIALS_PATH) "
-                "не найден или недоступен."
-            )
-
-        logger.debug("Loading Firebase service account credentials from configured file.")
-        return credentials.Certificate(str(creds_path))
+    def _build_credentials(self, settings: Settings) -> service_account.Credentials:
+        """Create Google OAuth2 service account credentials solely from env settings."""
+        private_key = normalize_private_key(settings.firebase_private_key.get_secret_value())
+        service_account_info = {
+            "type": "service_account",
+            "project_id": settings.firebase_project_id,
+            "client_email": settings.firebase_client_email,
+            "private_key": private_key,
+            "token_uri": _GOOGLE_TOKEN_URI,
+        }
+        logger.debug(
+            "Building Firebase service account credentials from environment for project_id={}.",
+            settings.firebase_project_id,
+        )
+        return service_account.Credentials.from_service_account_info(
+            service_account_info,
+            scopes=_FIREBASE_SCOPES,
+        )
 
     def get_client(self) -> FirestoreClient:
         """Return initialized Firestore client or raise DatabaseConnectionError."""

@@ -244,6 +244,12 @@ def test_create_application_registers_all_stage_1_2_handlers(
     settings = Settings(
         bot_token="123456:FakeBotTokenForAppSetup",  # type: ignore[arg-type]
         firebase_project_id="astralio-test",
+        firebase_client_email="firebase-adminsdk-test@astralio-test.iam.gserviceaccount.com",
+        firebase_private_key=(
+            "-----BEGIN PRIVATE KEY-----\\n"  # type: ignore[arg-type]
+            "YXN0cmFsaW8tdGVzdC1wbGFjZWhvbGRlcg==\\n"
+            "-----END PRIVATE KEY-----"
+        ),
     )
     app = create_application(settings=settings, user_service=user_service)
 

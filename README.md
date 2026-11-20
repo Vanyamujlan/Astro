@@ -68,7 +68,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Заполните `BOT_TOKEN`, `FIREBASE_PROJECT_ID` и `FIREBASE_CREDENTIALS_PATH` (либо используйте ADC в облаке).
+Заполните `BOT_TOKEN`, `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` (и при необходимости `FIREBASE_DATABASE_ID`).
 
 ### 3. Запуск и проверка
 

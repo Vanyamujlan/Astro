@@ -13,6 +13,15 @@
 
 ---
 
+## [0.3.1] - 2026-11-20 (Firebase Admin `.env` Auth)
+### Изменено
+- Авторизация Firebase Admin SDK в `app/database/firebase.py` переведена на `google.oauth2.service_account.Credentials.from_service_account_info` исключительно через переменные окружения (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, `FIREBASE_DATABASE_ID`), без файла `firebase-credentials.json`.
+- В `app/config.py` добавлена нормализация однострочных `\n` и валидация `FIREBASE_CLIENT_EMAIL` и PEM/base64-формата `FIREBASE_PRIVATE_KEY` (`SecretStr`) без утечки секретов.
+- Усилено маскирование усечённых PEM-ключей в `app/utils/sanitizers.py`.
+- Обновлены `.env.example` (безопасные заглушки), `README.md` и unit-тесты (`34 passed`, `ruff check .` — 0 ошибок).
+
+---
+
 ## [0.3.0] - 2026-11-20 (Этап 1.3)
 ### Исправлено
 - Исправлена ошибка жизненного цикла `Application` в `app/main.py` (удалён некорректный `async with application:` вокруг `start()`, внедрён строгий порядок `updater.stop() → stop() → shutdown() → close_firebase()`).

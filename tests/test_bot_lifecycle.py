@@ -35,6 +35,12 @@ async def test_run_bot_startup_and_graceful_shutdown_order() -> None:
     settings = Settings(
         bot_token="123456:FakeLifecycleToken",  # type: ignore[arg-type]
         firebase_project_id="astralio-test",
+        firebase_client_email="firebase-adminsdk-test@astralio-test.iam.gserviceaccount.com",
+        firebase_private_key=(
+            "-----BEGIN PRIVATE KEY-----\\n"  # type: ignore[arg-type]
+            "YXN0cmFsaW8tdGVzdC1wbGFjZWhvbGRlcg==\\n"
+            "-----END PRIVATE KEY-----"
+        ),
     )
     events: list[str] = []
 
@@ -105,6 +111,12 @@ async def test_run_bot_invalid_token_cleans_up_resources() -> None:
     settings = Settings(
         bot_token="123456:InvalidFakeToken",  # type: ignore[arg-type]
         firebase_project_id="astralio-test",
+        firebase_client_email="firebase-adminsdk-test@astralio-test.iam.gserviceaccount.com",
+        firebase_private_key=(
+            "-----BEGIN PRIVATE KEY-----\\n"  # type: ignore[arg-type]
+            "YXN0cmFsaW8tdGVzdC1wbGFjZWhvbGRlcg==\\n"
+            "-----END PRIVATE KEY-----"
+        ),
     )
     fake_app = MagicMock()
     fake_app.running = False
@@ -190,6 +202,12 @@ def test_create_application_registers_unknown_command_handler() -> None:
     settings = Settings(
         bot_token="123456:FakeBotTokenForLifecycle",  # type: ignore[arg-type]
         firebase_project_id="astralio-test",
+        firebase_client_email="firebase-adminsdk-test@astralio-test.iam.gserviceaccount.com",
+        firebase_private_key=(
+            "-----BEGIN PRIVATE KEY-----\\n"  # type: ignore[arg-type]
+            "YXN0cmFsaW8tdGVzdC1wbGFjZWhvbGRlcg==\\n"
+            "-----END PRIVATE KEY-----"
+        ),
     )
     app = create_application(settings=settings, user_service=MagicMock())
     # Group 0: 2 CommandHandlers + 1 MessageHandler(COMMAND) + 7 CallbackQueryHandlers = 10

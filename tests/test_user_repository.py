@@ -307,33 +307,44 @@ async def test_start_handler_flow(user_service: UserService) -> None:
     assert "Astralio" in sent_messages[1]["text"]
 
 
-def test_firebase_manager_missing_credentials_file() -> None:
-    """Missing credentials JSON raises DatabaseConnectionError clearly."""
-    settings = Settings(
-        bot_token="123456:TestToken",  # type: ignore[arg-type]
-        firebase_project_id="astro-test",
-        firebase_credentials_path="/nonexistent/path/serviceAccountKey.json",
-    )
-    manager = FirebaseManager()
-    with pytest.raises(DatabaseConnectionError):
-        manager.initialize(settings)
+_TEST_CLIENT_EMAIL = "firebase-adminsdk-test@astralio-test.iam.gserviceaccount.com"
+_TEST_PRIVATE_KEY_RAW = (
+    "-----BEGIN PRIVATE KEY-----\\n"
+    "YXN0cmFsaW8tdGVzdC1wbGFjZWhvbGRlcg==\\n"
+    "-----END PRIVATE KEY-----\\n"
+)
 
 
-def test_firebase_manager_duplicate_init_guard_and_database_id() -> None:
-    """FirebaseManager initializes once and passes custom database_id when set."""
-    settings = Settings(
+def _make_test_settings(
+    project_id: str = "astralio-test",
+    database_id: str | None = None,
+) -> Settings:
+    return Settings(
         bot_token="123456:TestToken",  # type: ignore[arg-type]
-        firebase_project_id="astro-test",
-        firebase_credentials_path=None,
-        firebase_database_id="astro-native-db",
+        firebase_project_id=project_id,
+        firebase_client_email=_TEST_CLIENT_EMAIL,
+        firebase_private_key=_TEST_PRIVATE_KEY_RAW,  # type: ignore[arg-type]
+        firebase_database_id=database_id,
+    )
+
+
+def test_firebase_manager_env_credentials_and_database_id() -> None:
+    """FirebaseManager builds service_account.Credentials from env vars and inits once."""
+    settings = _make_test_settings(
+        project_id="astralis-b2fcb",
+        database_id="astralio-native-db",
     )
     manager = FirebaseManager()
+    fake_cred = MagicMock()
     fake_app = MagicMock()
     fake_client = MagicMock()
 
     with (
         patch("app.database.firebase.firebase_admin.get_app", side_effect=ValueError("no app")),
-        patch("app.database.firebase.credentials.ApplicationDefault", return_value=MagicMock()),
+        patch(
+            "app.database.firebase.service_account.Credentials.from_service_account_info",
+            return_value=fake_cred,
+        ) as mock_from_info,
         patch(
             "app.database.firebase.firebase_admin.initialize_app",
             return_value=fake_app,
@@ -348,16 +359,74 @@ def test_firebase_manager_duplicate_init_guard_and_database_id() -> None:
 
         assert client_1 is fake_client
         assert client_2 is fake_client
-        mock_init_app.assert_called_once()
-        mock_fs_client.assert_called_once_with(app=fake_app, database_id="astro-native-db")
+
+        mock_from_info.assert_called_once()
+        info_arg = mock_from_info.call_args.args[0]
+        assert info_arg["type"] == "service_account"
+        assert info_arg["project_id"] == "astralis-b2fcb"
+        assert info_arg["client_email"] == _TEST_CLIENT_EMAIL
+        assert info_arg["private_key"] == (
+            "-----BEGIN PRIVATE KEY-----\n"
+            "YXN0cmFsaW8tdGVzdC1wbGFjZWhvbGRlcg==\n"
+            "-----END PRIVATE KEY-----\n"
+        )
+        assert info_arg["token_uri"] == "https://oauth2.googleapis.com/token"
+        assert "scopes" in mock_from_info.call_args.kwargs
+
+        mock_init_app.assert_called_once_with(
+            credential=fake_cred,
+            options={"projectId": "astralis-b2fcb"},
+        )
+        mock_fs_client.assert_called_once_with(app=fake_app, database_id="astralio-native-db")
+
+
+def test_firebase_manager_invalid_service_account_key_raises_safely() -> None:
+    """Invalid RSA/PEM error from google-auth wraps cleanly without leaking key content."""
+    settings = _make_test_settings(project_id="astralis-b2fcb")
+    manager = FirebaseManager()
+
+    with (
+        patch("app.database.firebase.firebase_admin.get_app", side_effect=ValueError("no app")),
+        patch(
+            "app.database.firebase.service_account.Credentials.from_service_account_info",
+            side_effect=ValueError("Invalid PEM key: YXN0cmFsaW8tdGVzdC1wbGFjZWhvbGRlcg=="),
+        ),
+    ):
+        with pytest.raises(DatabaseConnectionError) as exc_info:
+            manager.initialize(settings)
+
+    assert "YXN0cmFsaW8tdGVzdC1wbGFjZWhvbGRlcg==" not in str(exc_info.value)
+    assert "FIREBASE_PRIVATE_KEY" in str(exc_info.value)
+
+
+async def test_firebase_manager_default_db_and_user_repository_compat() -> None:
+    """Default database_id omits database_id arg and client works with UserRepository."""
+    settings = _make_test_settings(project_id="astralis-b2fcb", database_id=None)
+    manager = FirebaseManager()
+    fake_db = FakeFirestoreClient()
+
+    with (
+        patch("app.database.firebase.firebase_admin.get_app", side_effect=ValueError("no app")),
+        patch(
+            "app.database.firebase.service_account.Credentials.from_service_account_info",
+            return_value=MagicMock(),
+        ),
+        patch("app.database.firebase.firebase_admin.initialize_app", return_value=MagicMock()),
+        patch("app.database.firebase.firestore.client", return_value=fake_db) as mock_fs_client,
+    ):
+        manager.initialize(settings)
+        mock_fs_client.assert_called_once()
+        assert "database_id" not in mock_fs_client.call_args.kwargs
+
+        repo = UserRepository(manager.get_client())
+        created = await repo.create_user(9001, "compat_user", "Pavel", "ru")
+        assert created.telegram_id == 9001
+        assert await repo.user_exists(9001) is True
 
 
 def test_firebase_manager_project_mismatch_and_close() -> None:
     """FirebaseManager rejects mismatched existing App project_id and cleans up on close."""
-    settings = Settings(
-        bot_token="123456:TestToken",  # type: ignore[arg-type]
-        firebase_project_id="expected-project",
-    )
+    settings = _make_test_settings(project_id="expected-project")
     manager = FirebaseManager()
     wrong_app = MagicMock(project_id="other-project")
 
