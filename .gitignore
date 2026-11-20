@@ -1,8 +1,45 @@
-node_modules/
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Firebase & Service Account Secrets
+serviceAccountKey.json
+firebase-credentials.json
+*firebase-adminsdk*.json
+*service-account*.json
+firebase-applet-config.json
+secrets/
+*.pem
+*.key
+
+# Python Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python Cache & Build Artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
 build/
 dist/
-coverage/
-.DS_Store
+
+# Testing & Linting Caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Logs
 *.log
-.env*
-!.env.example
+logs/
+
+# OS & IDE
+.DS_Store
+.idea/
+.vscode/

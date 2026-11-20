@@ -1,77 +1,79 @@
 # 01. Архитектура и назначение модулей (Architecture)
 
-> **Статус:** Архитектура утверждена на уровне проектирования. Файлы исходного кода в `src/` ещё не созданы.
+> **Продукт:** Astralio (`v0.2.0`)  
+> **Статус:** `COMPLETED` для каркаса Этапов 1.1–1.2; доменные расчёты, ИИ и платежи имеют статус `PLANNED`.
 
 ---
 
-## 1. Общий архитектурный подход
-
-Проект строится по принципу **слоистой модульной архитектуры** (Layered Modular Architecture). Каждый слой решает свою задачу и не смешивается с другими:
-
-1. **Слой взаимодействия с Telegram (`bot`, `handlers`, `keyboards`, `admin`)** — принимает команды/сообщения/нажатия кнопок, проверяет ввод пользователя и отображает ответы. Не содержит бизнес-логики и прямых SQL-запросов.
-2. **Слой бизнес-логики (`services`, `payments`, `subscriptions`, `referrals`, `scheduler`)** — управляет сценариями: проверка лимитов и подписки, списание баланса, работа с кэшем, начисление реферальных бонусов, планирование рассылок.
-3. **Слой доменных вычислений и ИИ (`astrology`, `ai`)** — математическое ядро (расчёты планет, домов, транзитов, синастрии, нумерологии, рендер карт и PDF) и шлюз к языковой модели.
-4. **Слой доступа к данным (`database`)** — модели таблиц (ORM) и репозитории (изолированные классы для чтения/записи данных). Обеспечивает безболезненный переход с SQLite (WAL) на PostgreSQL.
-5. **Инфраструктурный слой (`config`, `utils`)** — загрузка настроек из `.env` и YAML, логирование, антиспам/защита от двойных нажатий, валидаторы текста и дат.
-
-### Ключевой инженерный принцип (Математика → ИИ)
-Нейросеть **не выполняет** астрологических вычислений. Пайплайн всегда выглядит так:
-`Данные рождения → Геокодинг (офлайн) → pyswisseph (точные координаты/аспекты) → Структурированный JSON → Проверка кэша → OpenAI-compatible AI (только текст интерпретации)`.
-
----
-
-## 2. Планируемая структура каталогов и модулей
-
-> Пометка `[Запланировано]` означает, что модуль спроектирован, но код будет создан на соответствующих этапах разработки.
+## 1. Общая структура файлов (Этап 1.2)
 
 ```text
-astro_bot/
-├── audits/                   # [Создано] Независимая документация и отчёты аудита
-├── config/                   # [Запланировано] settings.py, pricing.yaml, prompts.yaml
-├── assets/                   # [Запланировано] ephe/ (.se1), fonts/, geo/, images/
-├── alembic/                  # [Запланировано] Миграции схемы БД
-├── src/                      # [Запланировано] Исходный код приложения
-│   ├── main.py
+astralio/
+├── app/
+│   ├── __init__.py                          # [COMPLETED] Версия 0.2.0 (Astralio)
+│   ├── main.py                              # [COMPLETED] Асинхронный жизненный цикл бота
+│   ├── config.py                            # [COMPLETED] Pydantic Settings (.env)
+│   ├── logging_config.py                    # [COMPLETED] Loguru + перехват stdlib logging
 │   ├── bot/
-│   ├── handlers/
-│   ├── keyboards/
-│   ├── services/
+│   │   ├── __init__.py
+│   │   └── setup.py                         # [COMPLETED] Сборка Application, роутинг, error handler
 │   ├── database/
-│   ├── astrology/
-│   ├── ai/
-│   ├── payments/
-│   ├── subscriptions/
-│   ├── referrals/
-│   ├── admin/
-│   ├── scheduler/
+│   │   ├── __init__.py
+│   │   ├── firebase.py                      # [COMPLETED] Централизованный FirebaseManager
+│   │   ├── models.py                        # [COMPLETED] UserModel (+ interface_language, last_activity, onboarding_completed)
+│   │   └── repositories/
+│   │       ├── __init__.py
+│   │       └── user_repository.py           # [COMPLETED] Асинхронный UserRepository
+│   ├── handlers/
+│   │   ├── __init__.py
+│   │   ├── start.py                         # [COMPLETED] /start + главное меню
+│   │   ├── menu.py                          # [COMPLETED] Разделы, возврат и неизвестные callback
+│   │   ├── profile.py                       # [COMPLETED] Профиль пользователя из Firestore
+│   │   ├── settings.py                      # [COMPLETED] Настройка языка интерфейса
+│   │   └── help.py                          # [COMPLETED] Раздел «Помощь» и /help
+│   ├── keyboards/
+│   │   ├── __init__.py
+│   │   ├── main_menu.py                     # [COMPLETED] Главное меню InlineKeyboardMarkup
+│   │   └── navigation.py                    # [COMPLETED] Кнопка «Назад», профиль, выбор языка
+│   ├── services/
+│   │   ├── __init__.py
+│   │   └── user_service.py                  # [COMPLETED] UserService (регистрация, профиль, смена языка)
 │   └── utils/
-└── tests/                    # [Запланировано] Автоматические тесты pytest
+│       ├── __init__.py
+│       ├── callbacks.py                     # [COMPLETED] CallbackGuard (anti-double-tap) и safe_edit_message
+│       ├── exceptions.py                    # [COMPLETED] AstralioError и наследники
+│       ├── sanitizers.py                    # [COMPLETED] Маскирование секретов и Telegram ID
+│       └── texts.py                         # [COMPLETED] Минималистичные тексты и словарь языков (ru + слоты en/de)
+├── tests/
+│   ├── test_config.py                       # [COMPLETED] Тесты Settings и санитайзеров
+│   ├── test_user_repository.py              # [COMPLETED] Тесты Repository, Service, FirebaseManager
+│   └── test_navigation_and_profile.py       # [COMPLETED] Тесты меню, навигации, профиля, языка и защиты от повторов
+├── audits/                                  # [COMPLETED] Аудиторская документация
+├── .env.example
+├── .gitignore
+├── pyproject.toml
+├── requirements.txt
+├── README.md
+└── run.py
 ```
 
 ---
 
-## 3. Назначение модулей и ожидаемые пути
+## 2. Архитектура навигации и Callback-роутинга
 
-| Модуль | Планируемый путь | Назначение | Статус |
-| :--- | :--- | :--- | :--- |
-| `bot` | `src/bot/` | Сборка экземпляра бота, подключение middleware (антиспам, логирование, сессия БД), запуск/остановка. | Запланировано |
-| `handlers` | `src/handlers/` | Обработка команд (`/start`, `/natal`, `/compat`, `/forecast`, `/numerology`, `/balance`) и пошаговых диалогов (FSM). | Запланировано |
-| `keyboards` | `src/keyboards/` | Фабрики inline- и reply-клавиатур для меню, профилей, оплаты и админки. | Запланировано |
-| `services` | `src/services/` | Оркестрация сценариев (связывает кэш, биллинг, `astrology`, `ai` и отправку отчётов). | Запланировано |
-| `database` | `src/database/` | Движок БД (SQLite WAL / PostgreSQL), модели SQLAlchemy, репозитории (`user_repo`, `billing_repo`, `cache_repo`). | Запланировано |
-| `astrology` | `src/astrology/` | `pyswisseph`, синастрия, транзиты, нумерология, офлайн-геокодинг, рисование карт (`Pillow`), генерация PDF (`ReportLab`). | Запланировано |
-| `ai` | `src/ai/` | Асинхронный OpenAI-compatible клиент, менеджер промптов, retry-механизм, учёт токенов и дневного бюджета. | Запланировано |
-| `payments` | `src/payments/` | Обработка Telegram Stars (`XTR`), `pre_checkout_query`, `successful_payment`, атомарный внутренний кошелёк. | Запланировано |
-| `subscriptions` | `src/subscriptions/` | Управление тарифами (Free/Premium), расчёт дневных квот, проверка доступа к функциям. | Запланировано |
-| `referrals` | `src/referrals/` | Реферальные ссылки, защита от саморефералов, начисление бонусов, система промокодов. | Запланировано |
-| `admin` | `src/admin/` | Закрытая админ-панель в Telegram (финансы, расходы на ИИ, промокоды, пользователи, рассылки, бэкап). | Запланировано |
-| `scheduler` | `src/scheduler/` | Фоновые задачи: ежедневные/недельные/месячные рассылки по часовым поясам, проверка подписок, авто-бэкапы БД. | Запланировано |
-| `utils` | `src/utils/` | Логирование (`loguru`), защита от двойных кликов (throttling/locks), валидаторы дат, разбивка длинных сообщений. | Запланировано |
-| `tests` | `tests/` | Модульные и интеграционные тесты (`pytest`, `pytest-asyncio`). | Запланировано |
+Все переходы работают через редактирование одного сообщения (`safe_edit_message`) и обязательный `query.answer()`:
+
+- `/start` → регистрирует/синхронизирует пользователя через `UserService`, отправляет главное меню (`Astralio`).
+- `menu:natal`, `menu:compatibility`, `menu:forecasts`, `menu:premium` → `section_callback` → информационная страница + кнопка `Назад` (`nav:main`).
+- `menu:help` / `/help` → `help_callback` / `help_command` → справка Astralio + кнопка `Назад` (`nav:main`).
+- `menu:profile` / `nav:back:profile` → `profile_callback` → чтение `UserModel` из Firestore через `UserService.get_user_profile`, форматирование профиля (`Не указан` при отсутствии данных) + кнопки `Изменить язык` (`settings:language`) и `Назад` (`nav:main`).
+- `settings:language` → `language_menu_callback` → выбор языка (`settings:lang:ru`, `settings:lang:en`, `settings:lang:de`) + кнопка `Назад` (`nav:back:profile`).
+- Любой неизвестный `callback_data` → `unknown_callback_handler` → краткое уведомление без сбоя.
 
 ---
 
-## 4. Производительность и удобство поддержки
+## 3. Схема коллекции `users` в Firestore (обновление Этапа 1.2)
 
-- **Неблокирующий Event Loop:** процессорно-ёмкие задачи (`pyswisseph`, `Pillow`, `ReportLab`) будут выполняться через `await asyncio.to_thread(...)`, чтобы не тормозить обработку сообщений других пользователей.
-- **Удобство поддержки с телефона:** файлы разбиты на компактные модули (~100–250 строк), а тарифы, цены и промпты вынесены в редактируемые YAML-конфиги (`config/pricing.yaml`, `config/prompts.yaml`).
+- **Идентификатор документа:** `str(telegram_id)`
+- **Поля:** `telegram_id`, `username`, `first_name`, `language_code`, `interface_language` (по умолчанию `"ru"`), `created_at`, `updated_at`, `last_activity`, `onboarding_completed`, `subscription`, `birth_data`.
+- Коллекции `payments`, `subscriptions`, `ai_usage` остаются в статусе `PLANNED`.
