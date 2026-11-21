@@ -21,25 +21,27 @@ from app.utils.sanitizers import sanitize_secrets
 async def run_bot(settings: Settings) -> None:
     """Initialize Firebase, wire dependencies, and run Telegram polling until stopped."""
     db_client = init_firebase(settings)
-    user_repository = UserRepository(db_client)
-    user_service = UserService(user_repository)
-    application = create_application(settings=settings, user_service=user_service)
-
-    stop_event = asyncio.Event()
-    loop = asyncio.get_running_loop()
-
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
-            loop.add_signal_handler(sig, stop_event.set)
-        except NotImplementedError:
-            # Windows event loops do not support add_signal_handler
-            pass
-
-    def _polling_error_callback(exc: TelegramError) -> None:
-        application.create_task(application.process_error(error=exc, update=None))
-
+    application = None
     initialized = False
+
     try:
+        user_repository = UserRepository(db_client)
+        user_service = UserService(user_repository)
+        application = create_application(settings=settings, user_service=user_service)
+
+        stop_event = asyncio.Event()
+        loop = asyncio.get_running_loop()
+
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(sig, stop_event.set)
+            except NotImplementedError:
+                # Windows event loops do not support add_signal_handler
+                pass
+
+        def _polling_error_callback(exc: TelegramError) -> None:
+            application.create_task(application.process_error(error=exc, update=None))
+
         await application.initialize()
         initialized = True
         await application.start()
@@ -65,12 +67,13 @@ async def run_bot(settings: Settings) -> None:
     finally:
         # Stop updater and application BEFORE shutdown() to avoid
         # RuntimeError('This Application is still running!').
-        if application.updater is not None and application.updater.running:
-            await application.updater.stop()
-        if application.running:
-            await application.stop()
-        if initialized:
-            await application.shutdown()
+        if application is not None:
+            if application.updater is not None and application.updater.running:
+                await application.updater.stop()
+            if application.running:
+                await application.stop()
+            if initialized:
+                await application.shutdown()
         close_firebase()
         logger.info("Astralio bot shutdown complete.")
 

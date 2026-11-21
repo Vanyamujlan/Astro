@@ -6,6 +6,9 @@
 
 | ID | Файл | Описание и причина | Серьёзность | Статус |
 | :--- | :--- | :--- | :--- | :--- |
+| `BUG-08` | `app/handlers/start.py`, `profile.py`, `settings.py` | Прямое обращение `context.bot_data["user_service"]` вызывало необработанный `KeyError` при отсутствии `UserService` (и зависание спиннера callback-кнопки в `profile.py`/`settings.py`). | High | `COMPLETED` |
+| `BUG-09` | `app/handlers/start.py`, `settings.py` | `start_handler` перехватывал только `DatabaseOperationError` (без `DatabaseConnectionError`/прямых ошибок Firebase и без логирования причины `cause`); в `set_language_callback` ошибка БД внутри `except UserNotFoundError` могла не перехватываться. | Medium | `COMPLETED` |
+| `BUG-10` | `app/main.py` | `create_application()` находился вне блока `try ... finally`, из-за чего при сбое инициализации `Application` не вызывался `close_firebase()`. | Low | `COMPLETED` |
 | `BUG-03` | `app/main.py` | Использование `async with application:` вызывало `shutdown()` до `updater.stop()` и `application.stop()` во внешнем `finally:`, провоцируя `RuntimeError: This Application is still running!`. | Critical | `COMPLETED` (исправлено на явный порядок `stop → shutdown`) |
 | `BUG-04` | `app/main.py` | `start_polling()` не передавал `error_callback`, из-за чего ошибки опроса Telegram (`Conflict`, `NetworkError`) обходили `global_error_handler`. | High | `COMPLETED` (передаётся `error_callback`) |
 | `BUG-05` | `app/database/repositories/user_repository.py` | `DefaultCredentialsError`, `ValidationError`, `TimeoutError` не перехватывались в `UserRepository`, что вызывало необработанное падение `/start` при отсутствии ADC-прав или битом документе. | High | `COMPLETED` |

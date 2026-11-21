@@ -84,18 +84,29 @@ async def test_run_bot_startup_and_graceful_shutdown_order() -> None:
     fake_app.stop = AsyncMock(side_effect=fake_stop)
     fake_app.shutdown = AsyncMock(side_effect=fake_shutdown)
 
+    def fake_init_firebase(cfg: Settings) -> MagicMock:
+        events.append("init_firebase")
+        return MagicMock()
+
+    def fake_create_application(**kwargs: Any) -> MagicMock:
+        assert kwargs.get("user_service") is not None
+        events.append("create_application")
+        return fake_app
+
     def fake_close_firebase() -> None:
         events.append("close_firebase")
 
     with (
-        patch("app.main.init_firebase", return_value=MagicMock()),
+        patch("app.main.init_firebase", side_effect=fake_init_firebase),
         patch("app.main.close_firebase", side_effect=fake_close_firebase),
-        patch("app.main.create_application", return_value=fake_app),
+        patch("app.main.create_application", side_effect=fake_create_application),
         patch("app.main.asyncio.Event", return_value=FakeEvent()),
     ):
         await run_bot(settings)
 
     assert events == [
+        "init_firebase",
+        "create_application",
         "app.initialize",
         "app.start",
         "updater.start_polling",

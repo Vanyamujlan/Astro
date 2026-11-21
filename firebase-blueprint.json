@@ -1,0 +1,80 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Telegram user profile and subscription metadata stored by the Astralio Python backend.",
+      "type": "object",
+      "properties": {
+        "telegram_id": {
+          "type": "integer",
+          "description": "Unique numeric Telegram user identifier (also used as document ID)."
+        },
+        "username": {
+          "type": "string",
+          "description": "Optional Telegram @username without leading @.",
+          "maxLength": 64
+        },
+        "first_name": {
+          "type": "string",
+          "description": "Telegram user display first name.",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "language_code": {
+          "type": "string",
+          "description": "Optional IETF language tag reported by Telegram client.",
+          "maxLength": 16
+        },
+        "interface_language": {
+          "type": "string",
+          "description": "Selected Astralio bot interface language code.",
+          "enum": ["ru", "en", "de"]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC timestamp when the user document was first created."
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC timestamp of the last profile update."
+        },
+        "last_activity": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC timestamp of the user's most recent interaction."
+        },
+        "onboarding_completed": {
+          "type": "boolean",
+          "description": "Whether the user has completed initial /start onboarding."
+        },
+        "subscription": {
+          "type": "object",
+          "description": "User subscription plan, status, and expiration metadata."
+        },
+        "birth_data": {
+          "type": "object",
+          "description": "Optional natal chart birth data populated in Stage 2+."
+        }
+      },
+      "required": [
+        "telegram_id",
+        "first_name",
+        "interface_language",
+        "created_at",
+        "updated_at",
+        "onboarding_completed",
+        "subscription"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{telegramId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "Astralio Telegram user profiles keyed by stringified Telegram user ID. Accessed exclusively server-side via Firebase Admin SDK."
+    }
+  }
+}

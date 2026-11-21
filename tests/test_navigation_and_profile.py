@@ -257,3 +257,171 @@ def test_create_application_registers_all_stage_1_2_handlers(
     assert isinstance(app.bot_data["callback_guard"], CallbackGuard)
     # Default group 0: 2 commands + 1 unknown command + 7 callbacks (including fallback)
     assert len(app.handlers[0]) == 10
+
+
+async def test_start_end_to_end_application_dispatch_and_no_duplicates(
+    fake_db: FakeFirestoreClient,
+    user_service: UserService,
+) -> None:
+    """Real PTB Application routes /start to main menu, registers user, and avoids duplicates."""
+    from datetime import UTC, datetime
+    from unittest.mock import patch
+
+    from telegram import Chat, InlineKeyboardMarkup, Message, MessageEntity, Update, User
+
+    settings = Settings(
+        bot_token="123456:FakeBotTokenForDispatch",  # type: ignore[arg-type]
+        firebase_project_id="astralis-b2fcb",
+        firebase_client_email="firebase-adminsdk-test@astralis-b2fcb.iam.gserviceaccount.com",
+        firebase_private_key=(
+            "-----BEGIN PRIVATE KEY-----\\n"  # type: ignore[arg-type]
+            "YXN0cmFsaW8tdGVzdC1wbGFjZWhvbGRlcg==\\n"
+            "-----END PRIVATE KEY-----"
+        ),
+    )
+    app = create_application(settings=settings, user_service=user_service)
+    sent_payloads: list[dict[str, Any]] = []
+
+    async def fake_post(self: Any, endpoint: str, data: dict[str, Any] | None = None, **_: Any):
+        if endpoint == "getMe":
+            return {
+                "id": 123456,
+                "is_bot": True,
+                "first_name": "Astralio",
+                "username": "astralio_test_bot",
+            }
+        if endpoint == "sendMessage" and data is not None:
+            sent_payloads.append(data)
+            return {
+                "message_id": len(sent_payloads),
+                "date": int(datetime.now(UTC).timestamp()),
+                "chat": {"id": data["chat_id"], "type": "private"},
+                "text": data["text"],
+            }
+        return True
+
+    bot_cls = type(app.bot)
+    with patch.object(bot_cls, "_post", new=fake_post):
+        await app.initialize()
+        for idx in (1, 2):
+            msg = Message(
+                message_id=idx,
+                date=datetime.now(UTC),
+                chat=Chat(id=777001, type="private"),
+                from_user=User(
+                    id=777001,
+                    first_name="Elena",
+                    is_bot=False,
+                    username="astral_user",
+                    language_code="ru",
+                ),
+                text="/start",
+                entities=[MessageEntity(type="bot_command", offset=0, length=6)],
+            )
+            msg.set_bot(app.bot)
+            await app.process_update(Update(update_id=idx, message=msg))
+        await app.shutdown()
+
+    assert len(sent_payloads) == 2
+    expected_text = (
+        "Astralio\n\n"
+        "Астрология. Персональные разборы. Прогнозы.\n\n"
+        "Выберите раздел."
+    )
+    for payload in sent_payloads:
+        assert payload["text"] == expected_text
+        markup = payload["reply_markup"]
+        assert isinstance(markup, InlineKeyboardMarkup)
+        labels = [row[0].text for row in markup.inline_keyboard]
+        assert labels == [
+            "Натальная карта",
+            "Совместимость",
+            "Прогнозы",
+            "Профиль",
+            "Premium",
+            "Помощь",
+        ]
+
+    # Repeated /start must not create duplicate users in Firestore
+    assert list(fake_db.collections["users"].keys()) == ["777001"]
+    assert len(fake_db.collections["users"]) == 1
+
+
+async def test_start_handles_firebase_error_gracefully_and_logs_safely() -> None:
+    """Firebase unavailability during /start sends friendly message without crashing."""
+    from unittest.mock import MagicMock
+
+    from google.api_core.exceptions import ServiceUnavailable
+    from loguru import logger
+
+    broken_doc = MagicMock()
+    broken_doc.get.side_effect = ServiceUnavailable("Firestore temporarily unavailable")
+    broken_db = MagicMock()
+    broken_db.collection.return_value.document.return_value = broken_doc
+
+    failing_service = UserService(UserRepository(broken_db))
+    context = SimpleNamespace(bot_data={"user_service": failing_service})
+
+    replies: list[str] = []
+
+    async def fake_reply_text(text: str, **kwargs: Any) -> None:
+        replies.append(text)
+
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(
+            id=90909,
+            username="fail_user",
+            first_name="Ivan",
+            language_code="ru",
+        ),
+        effective_message=SimpleNamespace(reply_text=fake_reply_text),
+    )
+
+    log_messages: list[str] = []
+    sink_id = logger.add(lambda msg: log_messages.append(str(msg)), level="ERROR")
+    try:
+        await start_handler(update, context)  # type: ignore[arg-type]
+    finally:
+        logger.remove(sink_id)
+
+    assert len(replies) == 1
+    assert "Временная ошибка сервиса" in replies[0]
+    assert any(
+        "DatabaseOperationError" in entry and "ServiceUnavailable" in entry
+        for entry in log_messages
+    )
+
+
+async def test_start_and_callbacks_handle_missing_user_service_without_key_error() -> None:
+    """Missing UserService in context.bot_data never raises KeyError."""
+    empty_context = SimpleNamespace(bot_data={})
+    replies: list[str] = []
+
+    async def fake_reply_text(text: str, **kwargs: Any) -> None:
+        replies.append(text)
+
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(
+            id=80808,
+            username="no_service_user",
+            first_name="Maria",
+            language_code="ru",
+        ),
+        effective_message=SimpleNamespace(reply_text=fake_reply_text),
+    )
+
+    await start_handler(update, empty_context)  # type: ignore[arg-type]
+    assert len(replies) == 1
+    assert "недоступен" in replies[0].lower()
+
+    # Verify callbacks also answer cleanly without KeyError
+    profile_query = FakeCallbackQuery(user_id=80808, data="menu:profile")
+    await profile_callback(SimpleNamespace(callback_query=profile_query), empty_context)  # type: ignore[arg-type]
+    assert len(profile_query.answers) == 1
+    assert len(profile_query.edits) == 1
+    assert "недоступен" in profile_query.edits[0]["text"].lower()
+
+    lang_query = FakeCallbackQuery(user_id=80808, data="settings:lang:ru")
+    await set_language_callback(SimpleNamespace(callback_query=lang_query), empty_context)  # type: ignore[arg-type]
+    assert len(lang_query.answers) == 1
+    assert "недоступен" in (lang_query.answers[0]["text"] or "").lower()

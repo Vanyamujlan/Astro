@@ -4,15 +4,21 @@
 
 ---
 
-## 1. Сводка последнего запуска (Firebase `.env` auth + Этап 1.3)
+## 1. Сводка последнего запуска (`/start` hardening + Firebase `.env` auth + Этап 1.3)
 
-- **Дата запуска:** `2026-11-20`
+- **Дата запуска:** `2026-11-21`
 - **Среда:** `.venv` (`CPython 3.12.16`, `pytest 8.4.2`, `pytest-asyncio 0.26.0`, `ruff 0.17.6`)
 
 | Проверка | Команда | Фактический результат | Статус |
 | :--- | :--- | :--- | :--- |
-| `pytest` | `pytest -v` | **`34 passed in 1.42s`** (0 failed, 0 skipped) | `COMPLETED` |
+| `pytest` | `pytest -v` | **`37 passed in 1.41s`** (0 failed, 0 skipped) | `COMPLETED` |
 | `ruff` | `ruff check .` | **`All checks passed!`** (0 ошибок) | `COMPLETED` |
+
+### Новые проверки `/start` и устойчивости (mock-тесты)
+- `test_start_end_to_end_application_dispatch_and_no_duplicates` — прохождение реального `telegram.Update` с `/start` через `create_application()` и `Application.process_update()`, проверка точного текста, `InlineKeyboardMarkup` со всеми 6 кнопками, записи в Firestore и отсутствия дубликатов при повторном `/start`.
+- `test_start_handles_firebase_error_gracefully_and_logs_safely` — при `ServiceUnavailable` из Firestore пользователь получает понятное сообщение об ошибке, исключение не пробрасывается, а в лог безопасно пишутся типы ошибки и первопричины.
+- `test_start_and_callbacks_handle_missing_user_service_without_key_error` — отсутствие `user_service` в `context.bot_data` не вызывает `KeyError` ни в `/start`, ни в `profile_callback`, ни в `set_language_callback`.
+- Обновлён `test_run_bot_startup_and_graceful_shutdown_order` — подтверждён строгий порядок `init_firebase → create_application → app.initialize → app.start → updater.start_polling`.
 
 ### Проверки авторизации Firebase через `.env` (mock-тесты)
 - Преобразование однострочного `FIREBASE_PRIVATE_KEY` с `\n` и кавычками в стандартный PEM внутри `SecretStr` (`tests/test_config.py`).

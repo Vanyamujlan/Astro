@@ -9,9 +9,8 @@ from telegram.ext import ContextTypes
 
 from app.database.models import UserModel
 from app.keyboards.navigation import back_to_main_keyboard, profile_keyboard
-from app.services.user_service import UserService
 from app.utils.callbacks import get_callback_guard, run_guarded_callback, safe_edit_message
-from app.utils.exceptions import DatabaseOperationError
+from app.utils.exceptions import DatabaseConnectionError, DatabaseOperationError
 from app.utils.sanitizers import mask_telegram_id
 from app.utils.texts import DEFAULT_LANGUAGE, get_language_label, get_texts
 
@@ -70,23 +69,41 @@ def format_profile_text(
 async def profile_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Load user profile from Firestore and display it cleanly."""
     query = update.callback_query
-    if query is None or query.from_user is None:
+    if query is None:
+        return
+    if query.from_user is None:
+        await query.answer()
         return
 
-    guard = get_callback_guard(context.bot_data)
-    user_service: UserService = context.bot_data["user_service"]
+    bot_data = getattr(context, "bot_data", None)
+    guard = get_callback_guard(bot_data if isinstance(bot_data, dict) else {})
+    user_service = bot_data.get("user_service") if isinstance(bot_data, dict) else None
     telegram_user = query.from_user
 
     async def _handle() -> None:
         await query.answer()
-        try:
-            profile = await user_service.get_user_profile(telegram_user.id)
-        except DatabaseOperationError:
+        t = get_texts(DEFAULT_LANGUAGE)
+        if user_service is None or not callable(getattr(user_service, "get_user_profile", None)):
             logger.error(
-                "Database error loading profile for user={}.",
+                "UserService is missing in context.bot_data during profile view for user={}.",
                 mask_telegram_id(telegram_user.id),
             )
-            t = get_texts(DEFAULT_LANGUAGE)
+            await safe_edit_message(
+                query=query,
+                text=t["service_unavailable"],
+                reply_markup=back_to_main_keyboard(DEFAULT_LANGUAGE),
+                parse_mode=None,
+            )
+            return
+
+        try:
+            profile = await user_service.get_user_profile(telegram_user.id)
+        except (DatabaseConnectionError, DatabaseOperationError) as exc:
+            logger.error(
+                "Database error loading profile for user={}: {}.",
+                mask_telegram_id(telegram_user.id),
+                type(exc).__name__,
+            )
             await safe_edit_message(
                 query=query,
                 text=t["db_error"],

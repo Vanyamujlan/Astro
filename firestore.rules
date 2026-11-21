@@ -1,0 +1,18 @@
+rules_version = '2';
+
+// Astralio is a server-side Python Telegram bot powered by Firebase Admin SDK.
+// All client-side Firestore SDK access is explicitly denied by default so user
+// profiles and future payment/subscription/birth data remain strictly private.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Explicit zero-trust lock for the users collection (server-only via Admin SDK)
+    match /users/{telegramId} {
+      allow read, write: if false;
+    }
+  }
+}

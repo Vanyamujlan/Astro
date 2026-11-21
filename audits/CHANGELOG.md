@@ -13,6 +13,27 @@
 
 ---
 
+## [0.3.3] - 2026-11-21 (Провижининг Firebase Firestore и деплой `firestore.rules`)
+### Добавлено
+- Подключён Firebase/Firestore в проекте `gen-lang-client-0054273535` (регион `europe-west2`, `firestoreDatabaseId`: `ai-studio-33d72824-acf4-44fb-aa2f-5775f5c6e33f`).
+- Создан `firebase-blueprint.json` со схемой сущности `User` и коллекции `/users/{telegramId}`.
+- Созданы и развёрнуты строгие серверные правила `firestore.rules` (полный запрет клиентского доступа `allow read, write: if false;` для всех документов и `/users/{telegramId}`).
+
+---
+
+## [0.3.2] - 2026-11-21 (Стабилизация `/start` и защита от `KeyError`)
+### Исправлено
+- В `app/handlers/start.py`, `app/handlers/profile.py` и `app/handlers/settings.py` устранён риск необработанного `KeyError` при отсутствии `user_service` в `context.bot_data` и гарантирован вызов `query.answer()`.
+- В `app/handlers/start.py` расширен перехват ошибок Firebase (`DatabaseConnectionError`, `DatabaseOperationError`, `FirebaseError`, `GoogleAPIError`, `GoogleAuthError`) с безопасным логированием типа ошибки и причины (`cause`).
+- В `app/handlers/settings.py` исправлен перехват ошибок БД внутри ветки восстановления `UserNotFoundError`.
+- В `app/main.py` создание `Application` перенесено в `try ... finally` для гарантированного вызова `close_firebase()`.
+
+### Добавлено
+- Текст `service_unavailable` в `app/utils/texts.py`.
+- End-to-end mock-тест маршрутизации `/start` через `Application.process_update()`, тесты сбоя Firebase, отсутствия `UserService`, отсутствия дубликатов при повторном `/start` и порядка инициализации Firebase (`37 passed`, `ruff check .` — 0 ошибок).
+
+---
+
 ## [0.3.1] - 2026-11-20 (Firebase Admin `.env` Auth)
 ### Изменено
 - Авторизация Firebase Admin SDK в `app/database/firebase.py` переведена на `google.oauth2.service_account.Credentials.from_service_account_info` исключительно через переменные окружения (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, `FIREBASE_DATABASE_ID`), без файла `firebase-credentials.json`.

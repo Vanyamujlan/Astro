@@ -2,6 +2,18 @@
 
 ---
 
+## Исправление и стабилизация `/start` (обработка `UserService`, Firebase и PTB-маршрутизации)
+
+- **Статус:** `COMPLETED` *(диагностика, исправления и 37 mock-тестов выполнены; реальный запуск с Telegram Bot API и облачным Firebase Firestore — `NOT_TESTED`)*
+- **Выполненные изменения:**
+  - `app/handlers/start.py`: устранён потенциальный `KeyError` при отсутствии `user_service` в `context.bot_data`, расширен перехват ошибок Firebase (`DatabaseConnectionError`, `DatabaseOperationError`, `FirebaseError`, `GoogleAPIError`, `GoogleAuthError`) с безопасным логированием класса ошибки и первопричины (`cause=...`) без вывода секретов.
+  - `app/handlers/profile.py`, `app/handlers/settings.py`: устранены аналогичные риски `KeyError` при обращении к `context.bot_data["user_service"]`, гарантирован вызов `query.answer()`, добавлен перехват `DatabaseConnectionError` и исправлен вложенный `except UserNotFoundError` в `set_language_callback`.
+  - `app/utils/texts.py`: добавлено минималистичное сообщение `service_unavailable`.
+  - `app/main.py`: создание `UserRepository`, `UserService` и `Application` перенесено внутрь `try ... finally`, чтобы `close_firebase()` вызывался даже при ошибке до `application.initialize()`.
+  - `tests/test_navigation_and_profile.py`, `tests/test_bot_lifecycle.py`: добавлены end-to-end mock-тесты маршрутизации `/start` через реальный `Application.process_update()`, проверки всех 6 кнопок, идемпотентности при повторном `/start`, обработки сбоев Firebase, отсутствия `UserService` и порядка запуска `init_firebase → create_application → start_polling`.
+
+---
+
 ## Конфигурация Firebase Admin SDK через `.env` (без JSON-файла)
 
 - **Статус:** `COMPLETED` *(код, валидация, санитизация секретов и 34 mock-теста пройдены; живое облачное подключение не выполнялось — `NOT_TESTED`)*
